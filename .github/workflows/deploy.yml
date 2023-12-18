@@ -7,7 +7,7 @@ on:
       - "*"
 
 env:
-  CRATE_NAME: mdbook-open-on-gh
+  CRATE_NAME: mdbook-open-gh-issue
 
 jobs:
   # Build sources for every OS

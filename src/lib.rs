@@ -4,9 +4,15 @@ use mdbook::book::{Book, BookItem, Chapter};
 use mdbook::errors::{Error, Result};
 use mdbook::preprocess::{Preprocessor, PreprocessorContext};
 
-pub struct OpenOn;
+pub struct OpenGhIssue;
 
-impl Preprocessor for OpenOn {
+impl OpenGhIssue {
+    pub fn new() -> OpenGhIssue {
+        OpenGhIssue
+    }
+}
+
+impl Preprocessor for OpenGhIssue {
     fn name(&self) -> &str {
         "open-on-gh"
     }
@@ -33,19 +39,18 @@ impl Preprocessor for OpenOn {
             return Ok(book);
         }
 
-        let branch = match ctx.config.get("output.html.git-branch") {
-            None => "main",
+        let template_name = match ctx.config.get("output.html.issue-template") {
+            None => "issue-template.yaml",
             Some(toml::Value::String(b)) => b,
             _ => return Ok(book),
         };
-        log::debug!("Git Branch: {}", branch);
 
-        let open_on_text = match ctx.config.get("output.html.open-on-text") {
-            None => "Found a bug? [Edit this page on GitHub.]",
+        let issue_text = match ctx.config.get("output.html.issue-text") {
+            None => "Outdated info? [Open issue on GitHub.]",
             Some(toml::Value::String(b)) => b,
             _ => return Ok(book),
         };
-        log::debug!("Footer text: {}", open_on_text);
+        log::debug!("Footer text: {}", issue_text);
 
         let mut res = None;
         book.for_each_mut(|item: &mut BookItem| {
@@ -55,12 +60,12 @@ impl Preprocessor for OpenOn {
 
             if let BookItem::Chapter(ref mut chapter) = *item {
                 res = Some(
-                    open_on(
+                    issue_open(
                         &git_root,
                         &src_root,
                         repository_url,
-                        branch,
-                        open_on_text,
+                        template_name,
+                        issue_text,
                         chapter,
                     )
                     .map(|md| {
@@ -87,17 +92,17 @@ fn parse_footer_text(text: &str) -> Option<(&str, &str, &str)> {
     Some((pre, link_text, post))
 }
 
-fn open_on(
+fn issue_open(
     git_root: &Path,
     src_root: &Path,
     base_url: &str,
-    branch: &str,
-    open_on_text: &str,
+    template_name: &str,
+    issue_text: &str,
     chapter: &mut Chapter,
 ) -> Result<String> {
     let content = &chapter.content;
 
-    let footer_start = "<footer id=\"open-on-gh\">";
+    let footer_start = "<footer id=\"gh-issue-open\">";
     if content.contains(footer_start) {
         return Ok(content.into());
     }
@@ -106,7 +111,7 @@ fn open_on(
         None => return Ok("".into()),
         Some(path) => path,
     };
-    let path = match src_root.join(&path).canonicalize() {
+    let path = match src_root.join(path).canonicalize() {
         Ok(path) => path,
         Err(_) => return Ok(content.into()),
     };
@@ -114,10 +119,15 @@ fn open_on(
     log::trace!("Chapter path: {}", path.display());
     log::trace!("Relative path: {}", relpath.display());
 
-    let url = format!("{}/edit/{}/{}", base_url, branch, relpath.display());
+    let url = format!(
+        "{}/issues/new?template={}&file={}",
+        base_url,
+        template_name,
+        relpath.display()
+    );
     log::trace!("URL: {}", url);
 
-    let (pre, link_text, post) = match parse_footer_text(open_on_text) {
+    let (pre, link_text, post) = match parse_footer_text(issue_text) {
         Some(parsed) => parsed,
         None => Err(Error::msg(
             "can't parse footer text. Missing `[link text]`?",
